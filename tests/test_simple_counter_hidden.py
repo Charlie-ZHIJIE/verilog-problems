@@ -3,41 +3,35 @@ from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, Timer
 
 @cocotb.test()
-async def test_reset(dut):
-    """Test synchronous reset"""
+async def test_load_basic(dut):
+    """Test basic load functionality - MUST FAIL if not implemented"""
     clock = Clock(dut.clk, 10, units="ns")
     cocotb.start_soon(clock.start())
     
-    # Initialize - set count to non-zero first
+    # Initialize all signals
     dut.rst.value = 0
-    dut.ena.value = 1  # Enable counting
+    dut.ena.value = 0
     dut.load.value = 0
     dut.load_value.value = 0
-    
-    # Count up a few times to set count to non-zero
-    for _ in range(5):
-        await RisingEdge(dut.clk)
-    await Timer(1, units="ns")
-    
-    # Now test reset - count should go to 0
-    dut.ena.value = 0
-    dut.rst.value = 1
     await RisingEdge(dut.clk)
     await Timer(1, units="ns")
-    assert dut.count.value == 0, f"Reset failed: expected 0, got {dut.count.value}"
     
-    # Verify reset持续生效
+    # Load a value - if not implemented, count will stay at 0 or X
+    dut.load.value = 1
+    dut.load_value.value = 42
     await RisingEdge(dut.clk)
     await Timer(1, units="ns")
-    assert dut.count.value == 0, f"Reset持续失败: expected 0, got {dut.count.value}"
+    
+    # This MUST fail if load is not implemented
+    assert dut.count.value == 42, f"Load not implemented: expected 42, got {dut.count.value}"
 
 @cocotb.test()
-async def test_count(dut):
-    """Test counting functionality"""
+async def test_count_increment(dut):
+    """Test counting - MUST FAIL if not implemented"""
     clock = Clock(dut.clk, 10, units="ns")
     cocotb.start_soon(clock.start())
     
-    # Reset to known state
+    # Reset to 0
     dut.rst.value = 1
     dut.ena.value = 0
     dut.load.value = 0
@@ -45,45 +39,42 @@ async def test_count(dut):
     await RisingEdge(dut.clk)
     await Timer(1, units="ns")
     
-    # Disable reset
+    # Release reset and enable counting
     dut.rst.value = 0
+    dut.ena.value = 1
     await RisingEdge(dut.clk)
     await Timer(1, units="ns")
     
-    # Enable counting - this should increment
-    dut.ena.value = 1
-    for i in range(1, 6):
+    # After one clock with ena=1, count should be 1
+    # This MUST fail if ena logic is not implemented
+    assert dut.count.value == 1, f"Count not working: expected 1, got {dut.count.value}"
+    
+    # Continue counting
+    for i in range(2, 5):
         await RisingEdge(dut.clk)
         await Timer(1, units="ns")
         assert dut.count.value == i, f"Count error: expected {i}, got {dut.count.value}"
 
 @cocotb.test()
-async def test_load(dut):
-    """Test load functionality"""
+async def test_reset(dut):
+    """Test synchronous reset"""
     clock = Clock(dut.clk, 10, units="ns")
     cocotb.start_soon(clock.start())
     
-    # Reset
-    dut.rst.value = 1
-    dut.ena.value = 0
-    dut.load.value = 0
-    dut.load_value.value = 0
-    await RisingEdge(dut.clk)
-    await Timer(1, units="ns")
+    # Load a non-zero value first
     dut.rst.value = 0
-    
-    # Load value 42
+    dut.ena.value = 0
     dut.load.value = 1
-    dut.load_value.value = 42
+    dut.load_value.value = 99
     await RisingEdge(dut.clk)
     await Timer(1, units="ns")
-    assert dut.count.value == 42, f"Load failed: expected 42, got {dut.count.value}"
     
-    # Disable load, count should stay at 42
+    # Now test reset
     dut.load.value = 0
+    dut.rst.value = 1
     await RisingEdge(dut.clk)
     await Timer(1, units="ns")
-    assert dut.count.value == 42, f"Hold failed: expected 42, got {dut.count.value}"
+    assert dut.count.value == 0, f"Reset failed: expected 0, got {dut.count.value}"
 
 @cocotb.test()
 async def test_priority(dut):
@@ -116,6 +107,14 @@ async def test_priority(dut):
     await RisingEdge(dut.clk)
     await Timer(1, units="ns")
     assert dut.count.value == 200, f"Load over rst failed: expected 200, got {dut.count.value}"
+    
+    # Test: rst has priority over ena
+    dut.load.value = 0
+    dut.rst.value = 1
+    dut.ena.value = 1
+    await RisingEdge(dut.clk)
+    await Timer(1, units="ns")
+    assert dut.count.value == 0, f"Rst over ena failed: expected 0, got {dut.count.value}"
 
 def test_simple_counter_hidden_runner():
     """Pytest wrapper for cocotb tests"""
