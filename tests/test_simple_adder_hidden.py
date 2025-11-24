@@ -1,6 +1,6 @@
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge
+from cocotb.triggers import RisingEdge, Timer
 
 @cocotb.test()
 async def test_addition(dut):
@@ -12,6 +12,7 @@ async def test_addition(dut):
     dut.a.value = 5
     dut.b.value = 3
     await RisingEdge(dut.clk)
+    await Timer(1, units="ns")  # Wait for non-blocking assignment to complete
     assert dut.sum.value == 8, f"Expected 8, got {dut.sum.value}"
 
 # ✅ CRITICAL: Pytest wrapper function
