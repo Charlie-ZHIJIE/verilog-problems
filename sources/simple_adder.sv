@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 module simple_adder (
     input wire clk,
     input wire [7:0] a,
