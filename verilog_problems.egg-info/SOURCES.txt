@@ -1,0 +1,8 @@
+README.md
+pyproject.toml
+tests/test_simple_adder_hidden.py
+verilog_problems.egg-info/PKG-INFO
+verilog_problems.egg-info/SOURCES.txt
+verilog_problems.egg-info/dependency_links.txt
+verilog_problems.egg-info/requires.txt
+verilog_problems.egg-info/top_level.txt

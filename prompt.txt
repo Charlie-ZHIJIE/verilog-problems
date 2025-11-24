@@ -1,0 +1,3 @@
+Implement an 8-bit synchronous adder in sources/simple_adder.sv.
+See docs/Specification.md for details.
+

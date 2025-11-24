@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: verilog-problems
+Version: 0.1.0
+Requires-Python: >=3.10
+Requires-Dist: cocotb>=1.8.0
+Requires-Dist: pytest>=7.0.0
+Requires-Dist: pytest-xdist>=3.0.0
