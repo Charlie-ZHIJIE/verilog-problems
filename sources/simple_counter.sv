@@ -8,6 +8,9 @@ module simple_counter (
     input wire load,
     output reg [7:0] count
 );
+    // Initialize to non-zero so tests will fail
+    initial count = 8'hFF;
+    
     // TODO: Implement counter logic
     // Requirements:
     // - Synchronous reset (rst): set count to 0
