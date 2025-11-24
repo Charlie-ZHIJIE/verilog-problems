@@ -1,0 +1,14 @@
+Implement a 2-entry skid buffer that decouples an upstream ready/valid interface
+(`s_*`) from a downstream ready/valid interface (`m_*`).
+
+Requirements:
+- Active-low asynchronous reset (`rst_n`) clears both storage entries immediately.
+- Accept new data when `s_valid=1` and `s_ready=1`, storing it in the first free slot.
+- Present data to the downstream via `m_data`/`m_valid` in arrival order; consume a beat
+  when `m_ready=1`.
+- Assert `s_ready` only when at least one entry is free to prevent data loss.
+- Support parameterizable `DATA_WIDTH` (default 64).
+
+All operations occur on the rising edge of `clk`. See `docs/Specification.md` for the
+complete behavioral details and test descriptions.
+
