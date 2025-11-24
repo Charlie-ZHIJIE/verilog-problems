@@ -8,19 +8,14 @@ module simple_counter (
     input wire load,
     output reg [7:0] count
 );
-    // Golden实现：优先级 load > rst > ena
-    always @(posedge clk) begin
-        if (load) begin
-            // 最高优先级：加载
-            count <= load_value;
-        end else if (rst) begin
-            // 第二优先级：复位
-            count <= 8'd0;
-        end else if (ena) begin
-            // 第三优先级：使能计数
-            count <= count + 8'd1;
-        end
-        // else: 保持当前值
-    end
+    // Initialize to non-zero so tests will fail
+    initial count = 8'hFF;
+    
+    // TODO: Implement counter logic
+    // Requirements:
+    // - Synchronous reset (rst): set count to 0
+    // - Enable (ena): count increments when ena=1
+    // - Load (load): set count to load_value when load=1
+    // Priority: load > rst > ena
 endmodule
 
