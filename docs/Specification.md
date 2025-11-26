@@ -11,7 +11,7 @@ A parameterized, dual-mode ready/valid decoupling buffer for AXI-Stream interfac
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `DATA_WIDTH` | 64 | Width of the data path in bits |
-| `BYPASS` | 0 | Operating mode: `0` = FIFO mode, `1` = Bypass mode |
+| `BYPASS` | 1 | Operating mode: `0` = FIFO mode, `1` = Bypass mode |
 | `DEPTH` | 2 | Buffer depth in entries (only used when `BYPASS=0`) |
 
 ## Interface
