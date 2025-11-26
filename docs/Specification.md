@@ -175,7 +175,17 @@ All tests must pass for the design to be considered correct.
 
 ---
 
-**Document Version**: 4.0 (Pure Requirements)  
+## Design Clarifications
+
+### Bypass Mode Implementation Note
+Bypass mode still requires a register to capture data when downstream is not ready. It is NOT a pure wire connection.
+
+### FIFO Mode Implementation Note  
+FIFO must support variable DEPTH. Use a memory array indexed by pointers, not hardcoded buffer0/buffer1.
+
+---
+
+**Document Version**: 4.1 (Pure Requirements with Clarifications)  
 **Last Updated**: November 2025  
 **Focus**: Behavioral requirements only, no implementation guidance  
 **Test Suite**: `tests/test_skid_buffer_hidden.py` (18 test cases across 3 configurations)
