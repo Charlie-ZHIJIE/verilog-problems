@@ -2,7 +2,7 @@
 
 module skid_buffer #(
     parameter DATA_WIDTH = 64,
-    parameter BYPASS     = 0,
+    parameter BYPASS     = 1,
     parameter DEPTH      = 2
 )(
     input                    clk,
