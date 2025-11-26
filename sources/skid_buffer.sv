@@ -1,7 +1,9 @@
 `timescale 1ns/1ps
 
 module skid_buffer #(
-    parameter DATA_WIDTH = 64
+    parameter DATA_WIDTH = 64,
+    parameter BYPASS     = 0,  // 1: skid buffer with bypass, 0: simple FIFO (no bypass)
+    parameter DEPTH      = 2   // only for BYPASS=0
 )(
     input                    clk,
     input                    rst_n,         // active-low async reset
@@ -13,20 +15,34 @@ module skid_buffer #(
     input                    m_ready
 );
 
-    // TODO: Implement skid buffer logic
+    // TODO: Implement parameterized skid buffer logic
     // 
-    // Requirements:
-    // 1. Two-stage buffer (buffer0 for output, buffer1 for skid)
-    // 2. Can accept new data when full IF dequeue is happening
-    // 3. Preserve strict FIFO ordering
-    // 4. Asynchronous reset clears all buffers immediately
+    // Two modes supported:
+    // 
+    // BYPASS = 0 (FIFO mode):
+    //   - Implement circular FIFO with DEPTH entries
+    //   - Use read_ptr, write_ptr, and count registers
+    //   - Handle four cases: {do_dequeue, do_enqueue} = 00, 01, 10, 11
+    //   - Case 11 is critical: simultaneous read and write
+    // 
+    // BYPASS = 1 (Bypass mode):
+    //   - Implement single skid register with bypass mux
+    //   - When empty: 0-cycle latency (m_data = s_data combinationally)
+    //   - When full: output from skid register
     //
-    // Hints:
-    // - Use two registers: buffer0 and buffer1
-    // - Track validity with buffer0_valid and buffer1_valid
-    // - Calculate next state in combinational logic (always @(*))
-    // - Update registers on clock edge (always @(posedge clk or negedge rst_n))
-    // - Handle four cases: {will_dequeue, will_enqueue}
+    // Common requirements:
+    //   - Asynchronous reset (rst_n=0) clears all buffers immediately
+    //   - Preserve strict FIFO ordering (no data loss or duplication)
+    //   - Back-pressure: s_ready=0 when buffer is full
+    //
+    // Implementation structure:
+    //   Use SystemVerilog generate blocks to separate the two architectures:
+    //   generate
+    //     if (BYPASS) begin : g_bypass
+    //       // Bypass mode implementation
+    //     end else begin : g_fifo
+    //       // FIFO mode implementation
+    //     end
+    //   endgenerate
 
 endmodule
-
