@@ -115,52 +115,6 @@ The design MUST support BOTH modes based on the `BYPASS` parameter.
 
 ---
 
-## Test Coverage
-
-The design will be verified with **3 configurations**:
-- `BYPASS=0, DEPTH=2` (2-entry FIFO)
-- `BYPASS=0, DEPTH=4` (4-entry FIFO)
-- `BYPASS=1, DEPTH=2` (Bypass mode, DEPTH ignored)
-
-**Total**: 6 tests × 3 configurations = **18 test cases**
-
-### Test Cases (All Configurations)
-
-1. **Reset Verification**
-   - Fill buffer to capacity
-   - Assert asynchronous reset
-   - Verify immediate clearing of all valid flags
-   - Verify buffer marked as empty
-
-2. **Full Throughput Stream**
-   - Downstream continuously ready (`m_ready = 1`)
-   - Send burst of data
-   - Verify all data arrives in correct order
-
-3. **Latency Verification**
-   - FIFO mode: Verify registered output behavior
-   - Bypass mode: Verify 0-cycle latency when empty
-
-4. **Alternating Back-pressure**
-   - Toggle `m_ready` between 0 and 1
-   - Verify data ordering is preserved
-   - Test simultaneous enqueue and dequeue scenarios
-
-5. **Random Handshake Stress Test**
-   - Random patterns for `s_valid` and `m_ready`
-   - Verify all sent data is received in order
-   - Scoreboard-based verification
-
-6. **Fill, Drain, and Wrap** (FIFO mode only)
-   - Fill buffer to `DEPTH` entries
-   - Verify full condition and back-pressure
-   - Enable output while continuing to send
-   - Verify correct wrap-around behavior
-   - Test simultaneous operations at boundaries
-
----
-
-**Document Version**: 6.0 (Abstract Behavioral Requirements)  
+**Document Version**: 6.1 (Abstract Behavioral Requirements - No Test Details)  
 **Last Updated**: November 2025  
-**Focus**: High-level behavioral specification without RTL implementation hints  
-**Test Suite**: `tests/test_skid_buffer_hidden.py` (18 test cases across 3 configurations)
+**Focus**: High-level behavioral specification without RTL implementation hints or test details
