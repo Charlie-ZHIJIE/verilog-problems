@@ -4,7 +4,7 @@
 `skid_buffer`
 
 ## Overview
-A parameterized, dual-mode ready/valid decoupling buffer for AXI-Stream interfaces. Supports two distinct operating modes optimized for different design priorities: deep buffering with registered output, or minimal latency with combinational bypass.
+A parameterized, dual-mode ready/valid decoupling buffer for AXI-Stream interfaces. Supports two distinct operating modes optimized for different design priorities.
 
 ## Parameters
 
@@ -28,25 +28,19 @@ A parameterized, dual-mode ready/valid decoupling buffer for AXI-Stream interfac
 - **`m_data[DATA_WIDTH-1:0]`**: Downstream data payload.
 - **`m_valid`**: Downstream valid signal. High indicates `m_data` contains valid data.
 
+---
+
 ## Operating Modes
 
-**CRITICAL**: The design MUST support BOTH modes based on the `BYPASS` parameter. Use SystemVerilog `generate` blocks to conditionally instantiate the two different architectures.
+The design MUST support BOTH modes based on the `BYPASS` parameter.
 
 ### Mode 1: FIFO (BYPASS=0)
 
-**Implementation Approach**: FIFO-style buffer with circular memory array
-
 #### Behavior
-- Implements a buffering structure with `DEPTH` entries (MUST support variable DEPTH, not hardcoded)
+- Implements a buffering structure with exactly `DEPTH` entries
 - Maintains strict **FIFO ordering**: first data in is first data out
 - Output is **registered** (data comes from internal storage)
 - Can buffer up to `DEPTH` data beats before asserting back-pressure
-
-#### Key Implementation Requirements
-- **MUST use a memory array**: `reg [DATA_WIDTH-1:0] mem [0:DEPTH-1];`
-- **MUST use pointers**: read pointer (`rd_ptr`) and write pointer (`wr_ptr`) to track position
-- **MUST track occupancy**: count register to know how many entries are valid
-- **MUST handle wrap-around**: pointers wrap to 0 when reaching DEPTH-1
 
 #### Capacity and Flow Control
 - **Full condition**: When buffer contains `DEPTH` entries → `s_ready = 0`
@@ -54,42 +48,27 @@ A parameterized, dual-mode ready/valid decoupling buffer for AXI-Stream interfac
 - **Normal operation**: Accepts data when not full, outputs data when not empty
 
 #### Critical Requirements
-1. **Buffer boundaries**: Must correctly handle wrap-around at buffer limits
-2. **Occupancy tracking**: Must accurately track how many entries are stored
-3. **Simultaneous operations**: When accepting new data AND outputting old data in the same cycle:
+1. **Variable depth support**: Must correctly support any `DEPTH` value (not hardcoded)
+2. **Boundary handling**: Must correctly manage buffer wrap-around
+3. **Occupancy tracking**: Must accurately track how many entries are stored
+4. **Simultaneous operations**: When accepting new data AND outputting old data in the same cycle:
    - Both operations must complete successfully
    - FIFO order must be preserved
    - No data loss or duplication
 
 #### Latency
-- Data passes through internal storage (registers)
+- Data passes through internal storage
 - Introduces at least 1 cycle of latency
-
-#### Use Cases
-- Designs requiring deep buffering
-- High-frequency implementations where timing closure is critical
-- When registered outputs are preferred for timing
 
 ---
 
 ### Mode 2: Bypass (BYPASS=1)
-
-**Implementation Approach**: Single-entry skid register with combinational bypass path
 
 #### Behavior
 - Implements a single-entry buffer with combinational bypass capability
 - When buffer is **empty**: data can pass through **combinationally** (0-cycle latency)
 - When buffer is **occupied**: behaves as a 1-entry registered buffer
 - Optimized for minimal latency in lightly-loaded scenarios
-
-#### Key Implementation Requirements
-- **MUST have a skid register**: `reg skid_valid; reg [DATA_WIDTH-1:0] skid_data;`
-- **NOT a pure wire connection**: The register captures data when downstream is not ready
-- **Combinational output mux**: When empty, output = input; when full, output = skid register
-  - `assign m_data = skid_valid ? skid_data : s_data;`
-  - `assign m_valid = skid_valid ? 1'b1 : s_valid;`
-- **Ready logic**: Can accept data when skid register is empty OR downstream is consuming
-  - `assign s_ready = !skid_valid || m_ready;`
 
 #### Capacity and Flow Control
 - **Maximum capacity**: 1 data beat
@@ -98,17 +77,12 @@ A parameterized, dual-mode ready/valid decoupling buffer for AXI-Stream interfac
 
 #### Critical Requirements
 1. **Bypass path**: When empty, `m_data` must reflect `s_data` combinationally
-2. **Capture logic**: When data arrives but downstream is not ready, must capture into internal register
+2. **Buffering capability**: When data arrives but downstream is not ready, must capture into internal register
 3. **Transition handling**: Correctly manage state transitions between empty and occupied
 
 #### Latency
 - **Best case**: 0 cycles (combinational bypass when empty)
 - **Worst case**: 1 cycle (when internal register is occupied)
-
-#### Use Cases
-- Low-latency pipeline stages
-- Designs where 0-cycle latency is beneficial
-- When buffer depth of 1 is sufficient
 
 ---
 
@@ -130,22 +104,27 @@ A parameterized, dual-mode ready/valid decoupling buffer for AXI-Stream interfac
 
 ### Ready/Valid Handshake Protocol
 - **Data transfer occurs** when: `valid = 1` AND `ready = 1` on same clock edge
-- **Valid independence**: `s_valid` must not depend on `s_ready` (upstream cannot wait for ready before asserting valid)
-- **Data stability**: Data must remain stable while valid is high until transfer completes
+- **Valid independence**: `s_valid` must not depend on `s_ready`
+- **Data stability**: Data must remain stable while `valid` is high until transfer completes
 - **Back-pressure**: When buffer is full, `s_ready = 0` prevents further data acceptance
 
 ### Throughput
 - **Target**: 1 data beat per cycle when not stalled
-- **Sustained throughput**: Achievable when `m_ready = 1` continuously
-- **Degradation**: Only when upstream provides no data (`s_valid = 0`) or buffer is full
+- **FIFO mode**: Sustained throughput achievable with continuous `m_ready = 1`
+- **Bypass mode**: Zero-latency throughput achievable when buffer is empty
 
 ---
 
 ## Test Coverage
 
-The design will be verified with the following test suite:
+The design will be verified with **3 configurations**:
+- `BYPASS=0, DEPTH=2` (2-entry FIFO)
+- `BYPASS=0, DEPTH=4` (4-entry FIFO)
+- `BYPASS=1, DEPTH=2` (Bypass mode, DEPTH ignored)
 
-### Core Functional Tests (All Configurations)
+**Total**: 6 tests × 3 configurations = **18 test cases**
+
+### Test Cases (All Configurations)
 
 1. **Reset Verification**
    - Fill buffer to capacity
@@ -172,9 +151,7 @@ The design will be verified with the following test suite:
    - Verify all sent data is received in order
    - Scoreboard-based verification
 
-### FIFO-Specific Tests (BYPASS=0 only)
-
-6. **Fill, Drain, and Wrap**
+6. **Fill, Drain, and Wrap** (FIFO mode only)
    - Fill buffer to `DEPTH` entries
    - Verify full condition and back-pressure
    - Enable output while continuing to send
@@ -183,55 +160,7 @@ The design will be verified with the following test suite:
 
 ---
 
-## Verification Summary
-
-The design will be tested with **3 configurations**:
-- `BYPASS=0, DEPTH=2` (2-entry FIFO)
-- `BYPASS=0, DEPTH=4` (4-entry FIFO)  
-- `BYPASS=1, DEPTH=2` (Bypass mode, DEPTH ignored)
-
-**Total**: 6 tests × 3 configurations = **18 test cases**
-
-All tests must pass for the design to be considered correct.
-
----
-
-## Implementation Strategy
-
-### Use Generate Blocks for Mode Selection
-
-You MUST use SystemVerilog `generate` blocks to implement the two modes:
-
-```systemverilog
-generate
-    if (BYPASS == 1) begin : gen_bypass_mode
-        // Bypass mode implementation
-        // Single skid register + combinational bypass
-    end else begin : gen_fifo_mode
-        // FIFO mode implementation  
-        // Memory array + pointers + count
-    end
-endgenerate
-```
-
-### Common Mistakes to Avoid
-
-❌ **DO NOT** implement Bypass mode as a pure wire connection (`assign m_data = s_data;`)
-   - This will lose data when downstream is not ready
-   - You MUST have a register to capture data during backpressure
-
-❌ **DO NOT** hardcode FIFO as `buffer0` and `buffer1` 
-   - This only works for DEPTH=2
-   - Tests will use DEPTH=4, which will fail
-   - You MUST use a memory array `mem[0:DEPTH-1]` with pointers
-
-✅ **DO** use generate blocks to conditionally instantiate the two architectures
-✅ **DO** use `reg [DATA_WIDTH-1:0] mem [0:DEPTH-1];` for FIFO mode
-✅ **DO** use `reg skid_valid, skid_data;` for Bypass mode
-
----
-
-**Document Version**: 4.2 (Requirements with Implementation Guidance)  
+**Document Version**: 6.0 (Abstract Behavioral Requirements)  
 **Last Updated**: November 2025  
-**Focus**: Behavioral requirements + key implementation hints to avoid common mistakes  
+**Focus**: High-level behavioral specification without RTL implementation hints  
 **Test Suite**: `tests/test_skid_buffer_hidden.py` (18 test cases across 3 configurations)
