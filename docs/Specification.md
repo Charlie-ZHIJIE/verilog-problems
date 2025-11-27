@@ -118,46 +118,6 @@ The component must exhibit fundamentally different observable behaviors based on
 
 ---
 
-## Critical Edge Cases
-
-### Scenario 1: Simultaneous Operations (Mode A)
-- Input accepts new data (s_valid && s_ready)
-- Output consumes old data (m_valid && m_ready)
-- Both must succeed in same cycle
-- Order must be preserved
-- Capacity must remain constant
-
-### Scenario 2: Empty-to-Full Transition (Mode A)
-- Component starts empty
-- Receives DEPTH consecutive inputs without any outputs
-- Must reach full state correctly
-- Must block further inputs
-- Must output oldest data first
-
-### Scenario 3: Full-to-Empty Transition (Mode A)
-- Component starts full with DEPTH items
-- Outputs DEPTH consecutive items without new inputs
-- Must reach empty state correctly
-- Must block outputs when empty
-- Must accept new inputs when empty
-
-### Scenario 4: Bypass Latency (Mode B)
-- Component is empty
-- New data arrives
-- Downstream is ready
-- Data must appear on output in same cycle (combinational)
-- No registered delay
-
-### Scenario 5: Bypass Capture (Mode B)
-- Component is empty
-- New data arrives
-- Downstream is NOT ready
-- Must capture data internally
-- Must present captured data on output
-- Must block new inputs
-
----
-
-**Document Version**: 7.0 (Pure Behavioral Requirements)  
+**Document Version**: 7.1 (Pure Behavioral - No Edge Case Hints)  
 **Last Updated**: November 2025  
-**Focus**: Observable behavior without implementation guidance
+**Focus**: Observable behavior without implementation guidance or edge case enumeration
