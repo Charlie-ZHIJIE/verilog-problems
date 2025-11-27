@@ -1,120 +1,163 @@
-# Skid Buffer Specification (Industry Standard)
+# Skid Buffer Specification
 
 ## Module Name
 `skid_buffer`
 
 ## Overview
-A parameterized, dual-mode ready/valid decoupling buffer for AXI-Stream interfaces. Supports two distinct operating modes optimized for different design priorities.
+A configurable ready/valid decoupling component for streaming interfaces. Must support two distinct behavioral modes selected at elaboration time.
 
 ## Parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `DATA_WIDTH` | 64 | Width of the data path in bits |
-| `BYPASS` | 1 | Operating mode: `0` = FIFO mode, `1` = Bypass mode |
-| `DEPTH` | 2 | Buffer depth in entries (only used when `BYPASS=0`) |
+| `DATA_WIDTH` | 64 | Width of data signals |
+| `BYPASS` | 1 | Mode selector: `0` or `1` |
+| `DEPTH` | 2 | Capacity parameter (interpretation depends on mode) |
 
 ## Interface
 
 ### Inputs
-- **`clk`**: System clock. All synchronous operations occur on the rising edge.
-- **`rst_n`**: Asynchronous reset, **active low**. Clears all stored data immediately when asserted.
-- **`s_data[DATA_WIDTH-1:0]`**: Upstream data payload.
-- **`s_valid`**: Upstream valid signal. High indicates `s_data` contains a valid beat.
-- **`m_ready`**: Downstream ready signal. High indicates the consumer can accept data.
+- `clk`: Clock signal
+- `rst_n`: Reset signal (active-low, asynchronous effect)
+- `s_data[DATA_WIDTH-1:0]`: Upstream data
+- `s_valid`: Upstream valid indicator
+- `m_ready`: Downstream ready indicator
 
 ### Outputs
-- **`s_ready`**: Upstream ready signal. High when the buffer can accept new data.
-- **`m_data[DATA_WIDTH-1:0]`**: Downstream data payload.
-- **`m_valid`**: Downstream valid signal. High indicates `m_data` contains valid data.
+- `s_ready`: Upstream ready indicator
+- `m_data[DATA_WIDTH-1:0]`: Downstream data
+- `m_valid`: Downstream valid indicator
 
 ---
 
-## Operating Modes
+## Behavioral Requirements
 
-The design MUST support BOTH modes based on the `BYPASS` parameter.
+### Mode Selection (BYPASS Parameter)
 
-### Mode 1: FIFO (BYPASS=0)
+The component must exhibit fundamentally different observable behaviors based on the `BYPASS` parameter value.
 
-#### Behavior
-- Implements a buffering structure with exactly `DEPTH` entries
-- Maintains strict **FIFO ordering**: first data in is first data out
-- Output is **registered** (data comes from internal storage)
-- Can buffer up to `DEPTH` data beats before asserting back-pressure
+### Mode A: When BYPASS = 0
 
-#### Capacity and Flow Control
-- **Full condition**: When buffer contains `DEPTH` entries → `s_ready = 0`
-- **Empty condition**: When buffer contains 0 entries → `m_valid = 0`
-- **Normal operation**: Accepts data when not full, outputs data when not empty
+**Observable Properties:**
 
-#### Critical Requirements
-1. **Variable depth support**: Must correctly support any `DEPTH` value (not hardcoded)
-2. **Boundary handling**: Must correctly manage buffer wrap-around
-3. **Occupancy tracking**: Must accurately track how many entries are stored
-4. **Simultaneous operations**: When accepting new data AND outputting old data in the same cycle:
-   - Both operations must complete successfully
-   - FIFO order must be preserved
-   - No data loss or duplication
+1. **Capacity Behavior**
+   - Can accept up to `DEPTH` data transfers before blocking
+   - After `DEPTH` consecutive acceptances (without any consumptions), must deassert ready
+   - Must resume accepting after at least one consumption
 
-#### Latency
-- Data passes through internal storage
-- Introduces at least 1 cycle of latency
+2. **Ordering Behavior**
+   - Output data sequence must exactly match input data sequence
+   - If input sequence is [A, B, C], output sequence must be [A, B, C]
+   - Order preservation must hold regardless of handshake timing
+
+3. **Latency Behavior**
+   - Data must not appear on output immediately when input is empty
+   - Output must reflect internally stored information
+   - Minimum observable delay between input acceptance and output availability
+
+4. **Simultaneity Behavior**
+   - Must support concurrent input acceptance and output consumption in same clock cycle
+   - During concurrent operations, capacity must not change
+   - Data must flow through without accumulation or loss
+
+5. **Capacity Scaling**
+   - Behavior must correctly scale with different `DEPTH` values
+   - Must work identically for DEPTH=2, DEPTH=4, DEPTH=8, etc.
+   - No fixed assumptions about capacity size
+
+### Mode B: When BYPASS = 1
+
+**Observable Properties:**
+
+1. **Latency Behavior**
+   - When no data is stored, output must reflect input data immediately
+   - Zero combinational delay path must exist from input to output when empty
+   - When storing data, output reflects stored information
+
+2. **Capacity Behavior**
+   - Can store at most one data item
+   - After storing, must block further acceptances until consumption occurs
+   - Must resume accepting immediately after consumption
+
+3. **Ordering Behavior**
+   - Output sequence must match input sequence
+   - First-in must be first-out
+
+4. **State Transitions**
+   - Empty → Occupied: When accepting data while downstream is blocked
+   - Occupied → Empty: When downstream consumes stored data
+   - Empty → Empty: When input flows directly through to output
+
+### Common Requirements (Both Modes)
+
+#### Reset Behavior
+- When `rst_n = 0`: Component must become empty immediately (asynchronous)
+- All outputs must reach known states
+- After reset release, must be ready to accept new data
+
+#### Handshake Protocol
+- **Data Transfer Rule**: Data moves when both `valid` and `ready` are high on clock edge
+- **Independence Rule**: Valid signals must not depend on ready signals in same direction
+- **Stability Rule**: Data and valid must remain stable until transfer completes
+
+#### Ordering Guarantee
+- For any input sequence I = [i₁, i₂, i₃, ..., iₙ]
+- Output sequence O = [o₁, o₂, o₃, ..., oₙ]
+- Must satisfy: I = O (exact order preservation)
+
+#### Completeness Guarantee
+- Every accepted data item must eventually appear on output
+- No data loss under any valid handshake pattern
+- No data duplication under any valid handshake pattern
+
+#### Throughput Goal
+- Should sustain one transfer per cycle under favorable conditions
+- Must not introduce unnecessary idle cycles
+- Mode A: Sustained throughput when downstream is ready
+- Mode B: Zero-latency throughput when empty
 
 ---
 
-### Mode 2: Bypass (BYPASS=1)
+## Critical Edge Cases
 
-#### Behavior
-- Implements a single-entry buffer with combinational bypass capability
-- When buffer is **empty**: data can pass through **combinationally** (0-cycle latency)
-- When buffer is **occupied**: behaves as a 1-entry registered buffer
-- Optimized for minimal latency in lightly-loaded scenarios
+### Scenario 1: Simultaneous Operations (Mode A)
+- Input accepts new data (s_valid && s_ready)
+- Output consumes old data (m_valid && m_ready)
+- Both must succeed in same cycle
+- Order must be preserved
+- Capacity must remain constant
 
-#### Capacity and Flow Control
-- **Maximum capacity**: 1 data beat
-- **Empty state**: Data bypasses directly from input to output (combinational path)
-- **Full state**: Must wait for downstream to consume before accepting new data
+### Scenario 2: Empty-to-Full Transition (Mode A)
+- Component starts empty
+- Receives DEPTH consecutive inputs without any outputs
+- Must reach full state correctly
+- Must block further inputs
+- Must output oldest data first
 
-#### Critical Requirements
-1. **Bypass path**: When empty, `m_data` must reflect `s_data` combinationally
-2. **Buffering capability**: When data arrives but downstream is not ready, must capture into internal register
-3. **Transition handling**: Correctly manage state transitions between empty and occupied
+### Scenario 3: Full-to-Empty Transition (Mode A)
+- Component starts full with DEPTH items
+- Outputs DEPTH consecutive items without new inputs
+- Must reach empty state correctly
+- Must block outputs when empty
+- Must accept new inputs when empty
 
-#### Latency
-- **Best case**: 0 cycles (combinational bypass when empty)
-- **Worst case**: 1 cycle (when internal register is occupied)
+### Scenario 4: Bypass Latency (Mode B)
+- Component is empty
+- New data arrives
+- Downstream is ready
+- Data must appear on output in same cycle (combinational)
+- No registered delay
 
----
-
-## Common Requirements (Both Modes)
-
-### Reset Behavior
-- **Type**: Asynchronous (takes effect immediately when `rst_n = 0`)
-- **Effect**: 
-  - All valid flags must be cleared
-  - Buffer must be marked as empty
-  - Ready signals must be asserted appropriately
-- **Recovery**: Normal operation resumes on next rising clock edge after `rst_n = 1`
-
-### FIFO Ordering Guarantee
-- **Strict ordering**: Data beats must exit in the exact same order they entered
-- **No reordering**: Even under complex ready/valid handshake patterns
-- **No duplication**: Each data beat must appear exactly once on output
-- **No loss**: When `s_ready = 1` and `s_valid = 1`, that data beat must eventually appear on output
-
-### Ready/Valid Handshake Protocol
-- **Data transfer occurs** when: `valid = 1` AND `ready = 1` on same clock edge
-- **Valid independence**: `s_valid` must not depend on `s_ready`
-- **Data stability**: Data must remain stable while `valid` is high until transfer completes
-- **Back-pressure**: When buffer is full, `s_ready = 0` prevents further data acceptance
-
-### Throughput
-- **Target**: 1 data beat per cycle when not stalled
-- **FIFO mode**: Sustained throughput achievable with continuous `m_ready = 1`
-- **Bypass mode**: Zero-latency throughput achievable when buffer is empty
+### Scenario 5: Bypass Capture (Mode B)
+- Component is empty
+- New data arrives
+- Downstream is NOT ready
+- Must capture data internally
+- Must present captured data on output
+- Must block new inputs
 
 ---
 
-**Document Version**: 6.1 (Abstract Behavioral Requirements - No Test Details)  
+**Document Version**: 7.0 (Pure Behavioral Requirements)  
 **Last Updated**: November 2025  
-**Focus**: High-level behavioral specification without RTL implementation hints or test details
+**Focus**: Observable behavior without implementation guidance
