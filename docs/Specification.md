@@ -4,120 +4,112 @@
 `skid_buffer`
 
 ## Overview
-A configurable ready/valid decoupling component for streaming interfaces. Must support two distinct behavioral modes selected at elaboration time.
+A configurable streaming interface adapter. Behavior varies based on elaboration-time parameters.
 
 ## Parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `DATA_WIDTH` | 64 | Width of data signals |
-| `BYPASS` | 1 | Mode selector: `0` or `1` |
-| `DEPTH` | 2 | Capacity parameter (interpretation depends on mode) |
+| `DATA_WIDTH` | 64 | Data signal width |
+| `BYPASS` | 1 | Mode selector |
+| `DEPTH` | 2 | Configuration parameter |
 
 ## Interface
 
 ### Inputs
-- `clk`: Clock signal
-- `rst_n`: Reset signal (active-low, asynchronous effect)
-- `s_data[DATA_WIDTH-1:0]`: Upstream data
-- `s_valid`: Upstream valid indicator
-- `m_ready`: Downstream ready indicator
+- `clk`: Clock
+- `rst_n`: Reset (active-low, asynchronous)
+- `s_data[DATA_WIDTH-1:0]`: Input data
+- `s_valid`: Input valid
+- `m_ready`: Output ready
 
 ### Outputs
-- `s_ready`: Upstream ready indicator
-- `m_data[DATA_WIDTH-1:0]`: Downstream data
-- `m_valid`: Downstream valid indicator
+- `s_ready`: Input ready
+- `m_data[DATA_WIDTH-1:0]`: Output data
+- `m_valid`: Output valid
 
 ---
 
-## Behavioral Requirements
+## Behavioral Specification
 
-### Mode Selection (BYPASS Parameter)
+### Transfer Protocol
 
-The component must exhibit fundamentally different observable behaviors based on the `BYPASS` parameter value.
+A transfer completes when `valid` and `ready` are both high on a rising clock edge.
 
-### Mode A: When BYPASS = 0
+**Key Rules:**
+- Valid must not depend on ready in the same direction
+- Data must remain stable while valid is high until transfer completes
+- Component must preserve data ordering: output sequence = input sequence
 
-**Observable Properties:**
+### Mode Differentiation (BYPASS Parameter)
 
-1. **Capacity Behavior**
-   - Can accept up to `DEPTH` data transfers before blocking
-   - After `DEPTH` consecutive acceptances (without any consumptions), must deassert ready
-   - Must resume accepting after at least one consumption
+The component must exhibit distinct behaviors for different `BYPASS` values.
 
-2. **Ordering Behavior**
-   - Output data sequence must exactly match input data sequence
-   - If input sequence is [A, B, C], output sequence must be [A, B, C]
-   - Order preservation must hold regardless of handshake timing
+#### When BYPASS = 0
 
-3. **Latency Behavior**
-   - Data must not appear on output immediately when input is empty
-   - Output must reflect internally stored information
-   - Minimum observable delay between input acceptance and output availability
+**Acceptance Behavior:**
+- Initially accepts transfers freely
+- After accepting N transfers without any outputs, begins blocking
+- N is determined by the `DEPTH` parameter
+- Resumes accepting after outputs consume data
 
-4. **Simultaneity Behavior**
-   - Must support concurrent input acceptance and output consumption in same clock cycle
-   - During concurrent operations, capacity must not change
-   - Data must flow through without accumulation or loss
+**Timing Behavior:**
+- Output does not reflect input instantaneously
+- Outputs are presented from previously accepted data
+- Supports continuous operation: can accept new input while producing output
 
-5. **Capacity Scaling**
-   - Behavior must correctly scale with different `DEPTH` values
-   - Must work identically for DEPTH=2, DEPTH=4, DEPTH=8, etc.
-   - No fixed assumptions about capacity size
+**Scaling Requirement:**
+- Behavior must adapt to arbitrary `DEPTH` values
+- Must function correctly for DEPTH=2, 4, 8, 16, etc.
+- No hardcoded assumptions
 
-### Mode B: When BYPASS = 1
+#### When BYPASS = 1
 
-**Observable Properties:**
+**Acceptance Behavior:**
+- Initially accepts transfers freely
+- After accepting without a corresponding output, blocks further inputs
+- Resumes accepting after output consumes data
 
-1. **Latency Behavior**
-   - When no data is stored, output must reflect input data immediately
-   - Zero combinational delay path must exist from input to output when empty
-   - When storing data, output reflects stored information
+**Timing Behavior:**
+- When not storing data: output reflects input in the same cycle
+- When storing data: output reflects stored data
+- Must support immediate flow-through when possible
 
-2. **Capacity Behavior**
-   - Can store at most one data item
-   - After storing, must block further acceptances until consumption occurs
-   - Must resume accepting immediately after consumption
+**Capacity:**
+- Limited acceptance capability (less than Mode A)
 
-3. **Ordering Behavior**
-   - Output sequence must match input sequence
-   - First-in must be first-out
+### Reset Behavior
 
-4. **State Transitions**
-   - Empty → Occupied: When accepting data while downstream is blocked
-   - Occupied → Empty: When downstream consumes stored data
-   - Empty → Empty: When input flows directly through to output
+When `rst_n = 0`:
+- Must immediately stop presenting valid outputs (asynchronous)
+- Must reach a clean initial state
+- Upon release, must be ready to accept new transfers
 
-### Common Requirements (Both Modes)
+### Correctness Requirements
 
-#### Reset Behavior
-- When `rst_n = 0`: Component must become empty immediately (asynchronous)
-- All outputs must reach known states
-- After reset release, must be ready to accept new data
+**Ordering:**
+- Every output must appear in the same order as inputs were accepted
+- If inputs [D₁, D₂, D₃] are accepted in that order, outputs must be [D₁, D₂, D₃]
 
-#### Handshake Protocol
-- **Data Transfer Rule**: Data moves when both `valid` and `ready` are high on clock edge
-- **Independence Rule**: Valid signals must not depend on ready signals in same direction
-- **Stability Rule**: Data and valid must remain stable until transfer completes
+**Completeness:**
+- Every accepted transfer must eventually produce an output
+- No data may be lost
+- No data may be duplicated
 
-#### Ordering Guarantee
-- For any input sequence I = [i₁, i₂, i₃, ..., iₙ]
-- Output sequence O = [o₁, o₂, o₃, ..., oₙ]
-- Must satisfy: I = O (exact order preservation)
+**Handshake Compliance:**
+- Must respect ready/valid protocol at all times
+- Must not violate protocol independence rules
+- Must maintain data stability requirements
 
-#### Completeness Guarantee
-- Every accepted data item must eventually appear on output
-- No data loss under any valid handshake pattern
-- No data duplication under any valid handshake pattern
+### Performance Expectations
 
-#### Throughput Goal
-- Should sustain one transfer per cycle under favorable conditions
-- Must not introduce unnecessary idle cycles
-- Mode A: Sustained throughput when downstream is ready
-- Mode B: Zero-latency throughput when empty
+- Should minimize latency where possible
+- Should maximize throughput under favorable conditions  
+- Mode A: Should sustain continuous operation when output is consuming
+- Mode B: Should enable zero-delay forwarding when not storing
 
 ---
 
-**Document Version**: 7.1 (Pure Behavioral - No Edge Case Hints)  
+**Document Version**: 8.0 (Abstract Behavioral Specification)  
 **Last Updated**: November 2025  
-**Focus**: Observable behavior without implementation guidance or edge case enumeration
+**Focus**: Observable behavior patterns without implementation concepts
