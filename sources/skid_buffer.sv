@@ -23,6 +23,6 @@ module skid_buffer #(
     // - Preserve FIFO ordering
     // - Handle simultaneous enqueue and dequeue
     //
-    // Use SystemVerilog generate blocks for the two modes.
+    // See docs/Specification.md for complete behavioral requirements.
 
 endmodule
