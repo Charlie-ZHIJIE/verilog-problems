@@ -15,14 +15,16 @@ module skid_buffer #(
     input                    m_ready
 );
 
-    // TODO: Implement parameterized skid buffer
+    // TODO: Implement parameterized ready/valid decoupling buffer
+    //
+    // This module's behavior is controlled by the BYPASS and DEPTH parameters.
+    // Read docs/Specification.md to understand the required behavior for different parameter values.
     //
     // Requirements:
-    // - Support two modes: BYPASS=0 (FIFO), BYPASS=1 (Bypass)
-    // - Asynchronous reset clears all buffers immediately
-    // - Preserve FIFO ordering
-    // - Handle simultaneous enqueue and dequeue
-    //
-    // See docs/Specification.md for complete behavioral requirements.
+    // - Behavior must vary based on BYPASS parameter value
+    // - Support configurable DEPTH parameter
+    // - Asynchronous reset (rst_n, active-low)
+    // - Preserve data ordering
+    // - Comply with ready/valid handshake protocol
 
 endmodule
