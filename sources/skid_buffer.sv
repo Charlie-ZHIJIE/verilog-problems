@@ -15,16 +15,16 @@ module skid_buffer #(
     input                    m_ready
 );
 
-    // TODO: Implement parameterized ready/valid decoupling buffer
+    // TODO: Implement parameterized streaming buffer
     //
-    // This module's behavior is controlled by the BYPASS and DEPTH parameters.
-    // Read docs/Specification.md to understand the required behavior for different parameter values.
+    // Behavior is controlled by BYPASS and DEPTH parameters.
+    // See docs/Specification.md for complete requirements.
     //
-    // Requirements:
-    // - Behavior must vary based on BYPASS parameter value
-    // - Support configurable DEPTH parameter
-    // - Asynchronous reset (rst_n, active-low)
-    // - Preserve data ordering
-    // - Comply with ready/valid handshake protocol
+    // Key requirements:
+    // - BYPASS=0: Can accept DEPTH transfers before blocking, has registered output
+    // - BYPASS=1: Limited buffering, supports zero-latency passthrough
+    // - Preserve strict data ordering (no reordering, loss, or duplication)
+    // - Asynchronous reset (rst_n active-low) clears all state immediately
+    // - Support arbitrary DEPTH values
 
 endmodule
