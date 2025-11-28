@@ -15,14 +15,16 @@ module skid_buffer #(
     input                    m_ready
 );
 
-    // TODO: Implement parameterized skid buffer
+    // TODO: Implement parameterized streaming buffer
     //
-    // Requirements:
-    // - Support two modes: BYPASS=0 (FIFO), BYPASS=1 (Bypass)
-    // - Asynchronous reset clears all buffers immediately
-    // - Preserve FIFO ordering
-    // - Handle simultaneous enqueue and dequeue
+    // Behavior is controlled by BYPASS and DEPTH parameters.
+    // See docs/Specification.md for complete requirements.
     //
-    // See docs/Specification.md for complete behavioral requirements.
+    // Key requirements:
+    // - BYPASS=0: Can accept DEPTH transfers before blocking, has registered output
+    // - BYPASS=1: Limited buffering, supports zero-latency passthrough
+    // - Preserve strict data ordering (no reordering, loss, or duplication)
+    // - Asynchronous reset (rst_n active-low) clears all state immediately
+    // - Support arbitrary DEPTH values
 
 endmodule
