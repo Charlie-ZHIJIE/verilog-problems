@@ -1,7 +1,7 @@
 /*
  *   Module: slicing_crc
  *
- *   Description: Slicing-by-N CRC calcualtor, designed for Ethernet. Based on Sarwate's
+ *   Description: Slicing-by-N CRC calculator, designed for Ethernet. Based on Sarwate's
  *                algorithm.
  *
  */
@@ -29,61 +29,27 @@ module slicing_crc #(
         $readmemh("crc_tables.mem", crc_tables);
     end
 
-    // Find number of bytes valid in this cycle
-    localparam int NUM_INPUT_BYTES_WIDTH = $clog2(SLICE_LENGTH) + 1;
-    logic [NUM_INPUT_BYTES_WIDTH-1:0] num_input_bytes;
-    wire any_valid;
+    // TODO: Implement the Slicing-by-N CRC calculation logic
+    //
+    // Requirements:
+    // 1. Calculate num_input_bytes based on i_valid (count how many bytes are valid)
+    // 2. Maintain a CRC state register (prev_crc) that updates on each valid cycle
+    // 3. Implement table-based lookup using Sarwate's algorithm:
+    //    - For first 4 bytes: XOR input byte with corresponding prev_crc byte
+    //    - For bytes beyond 4: Use input byte directly
+    //    - Look up in crc_tables[num_input_bytes - byte_position - 1][lookup_value]
+    // 4. XOR all table outputs together
+    // 5. XOR with shifted prev_crc: result = xor_result XOR (prev_crc >> (8*num_input_bytes))
+    // 6. Output handling:
+    //    - If REGISTER_OUTPUT=1: output prev_crc (1 cycle delayed)
+    //    - If REGISTER_OUTPUT=0: output crc_calc (combinational)
+    //    - Apply INVERT_OUTPUT if set
+    //
+    // See docs/Specification.md for detailed algorithm explanation.
 
-    always_comb begin
-        num_input_bytes = 0;
-        for (int i = 0; i < SLICE_LENGTH; i++) begin
-            if (i_valid[i]) begin
-                num_input_bytes = NUM_INPUT_BYTES_WIDTH '(i + 1);
-            end
-        end
-    end
-    assign any_valid = |i_valid;
-
-    // CRC storage
-    logic [31:0] prev_crc, crc_calc, crc_out;
-
-    always_ff @(posedge i_clk)
-    if (i_reset) begin
-        prev_crc <= INITIAL_CRC;
-    end else if (any_valid) begin
-        prev_crc <= crc_calc;
-    end
-
-    // Table lookups
-    wire [31:0] table_outs [SLICE_LENGTH];
-    generate for (genvar gi = 0; gi < SLICE_LENGTH; gi++) begin: l_assign_table_out
-        wire [7:0] table_lookup;
-        wire [31:0] table_out;
-
-        if (gi < 4) begin: l_prev_crc_lookup
-            assign table_lookup = i_data[8*gi +: 8] ^ prev_crc[8*gi +: 8];
-        end else begin: l_data_only_lookup
-            assign table_lookup = i_data[8*gi +: 8];
-        end
-
-        assign table_out = crc_tables[num_input_bytes - gi - 1][table_lookup]; // Note table[0] is for last (ms) byte
-        assign table_outs[gi] = table_out; // Keep both for debugging
-    end endgenerate
-
-    // Final CRC calculation
-    always_comb begin
-        crc_calc = 0;
-        for (int i = 0; i < SLICE_LENGTH; i++) begin
-            if (i_valid[i]) begin
-                crc_calc = crc_calc ^ table_outs[i];
-            end
-        end
-        crc_calc = crc_calc ^ prev_crc >> (8*num_input_bytes); // If slice length < 4, need to xor in the remaining bytes of previous o_crc
-    end
-
-    // CRC output
-    assign crc_out = REGISTER_OUTPUT ? prev_crc : crc_calc;
-    assign o_crc = INVERT_OUTPUT ? ~crc_out : crc_out;
+    // Placeholder - replace with your implementation
+    assign o_crc = 32'h0;
 
 endmodule
 
+`default_nettype wire
