@@ -146,7 +146,7 @@ m_tuser   ───────────────────────�
 
 ## 5. Submodule: slicing_crc
 
-The `slicing_crc` module is provided in `sources/slicing_crc.sv`. You must instantiate it correctly.
+The `slicing_crc` module must be implemented by you. It performs CRC-32 calculation using the Slicing-by-N algorithm.
 
 ### 5.1 Interface Summary
 
@@ -165,13 +165,125 @@ module slicing_crc #(
 );
 ```
 
-### 5.2 Usage Notes
+### 5.2 CRC-32 Algorithm Details (Slicing-by-N / Sarwate's Algorithm)
 
-- Set `SLICE_LENGTH = DATA_NBYTES` to match the data width
-- Set `REGISTER_OUTPUT = 0` for combinational CRC output (needed for same-cycle comparison)
-- Set `INVERT_OUTPUT = 1` for standard Ethernet CRC
-- Connect `i_reset` to reset CRC at frame start (when state is IDLE)
-- Connect `i_valid` to byte enables: `s_axis_tvalid ? s_axis_tkeep : '0`
+#### Algorithm Overview
+
+The Slicing-by-N algorithm (attributed to Dilip V. Sarwate, 1988) is an optimized table-lookup method for computing CRC-32. It allows processing multiple bytes in parallel, which is essential for hardware implementations at high data rates.
+
+**Standard CRC-32/Ethernet Parameters:**
+- **Polynomial**: `0x04C11DB7` (CRC-32-IEEE 802.3)
+- **Initial Value**: `0xFFFFFFFF`
+- **Output XOR**: `0xFFFFFFFF` (invert final result)
+- **Bit Order**: Process LSB first within each byte
+
+#### Why Slicing-by-N?
+
+Traditional bit-by-bit CRC calculation requires 8 clock cycles per byte. The slicing algorithm allows processing N bytes in a single clock cycle using N pre-computed table lookups and XOR operations.
+
+**Key Advantage**: Process up to `SLICE_LENGTH` bytes per clock cycle.
+
+#### Algorithm Steps
+
+For each clock cycle where `i_valid` has at least one asserted bit:
+
+1.  **Count Valid Bytes**: 
+    - Determine `num_input_bytes` by counting how many bits in `i_valid` are asserted.
+    - Example: If `i_valid = 4'b0111`, then `num_input_bytes = 3`.
+
+2.  **Table Lookup for Each Valid Byte**:
+    - For the first 4 bytes (indices 0-3):
+        ```
+        table_index[i] = i_data[i*8 +: 8] XOR prev_crc[i*8 +: 8]
+        table_out[i] = crc_tables[num_input_bytes - i - 1][table_index[i]]
+        ```
+    - For bytes beyond index 4 (if `SLICE_LENGTH > 4`):
+        ```
+        table_index[i] = i_data[i*8 +: 8]
+        table_out[i] = crc_tables[num_input_bytes - i - 1][table_index[i]]
+        ```
+
+3.  **XOR Reduction**:
+    ```
+    crc_calc = 0
+    for each valid byte i:
+        crc_calc = crc_calc XOR table_out[i]
+    crc_calc = crc_calc XOR (prev_crc >> (8 * num_input_bytes))
+    ```
+
+4.  **Update State Register**:
+    ```
+    On rising edge of i_clk:
+        if (i_reset)
+            prev_crc <= INITIAL_CRC
+        else if (any_valid)
+            prev_crc <= crc_calc
+    ```
+
+5.  **Output Selection**:
+    - If `REGISTER_OUTPUT = 1`: `crc_out = prev_crc` (registered, 1 cycle delayed)
+    - If `REGISTER_OUTPUT = 0`: `crc_out = crc_calc` (combinational, 0 cycle delay)
+    - Apply inversion: `o_crc = INVERT_OUTPUT ? ~crc_out : crc_out`
+
+#### CRC Tables Structure
+
+The pre-computed table file `crc_tables.mem` contains:
+```systemverilog
+logic [31:0] crc_tables [MAX_SLICE_LENGTH][256];
+```
+
+- **Dimensions**: `[16][256]` (supports up to 16 bytes per cycle)
+    - First index `[slice]`: Byte position relative to the slice size (0 = last byte, N-1 = first byte)
+    - Second index `[byte]`: Input byte value (0x00 to 0xFF)
+- **Content**: Each entry `crc_tables[slice][byte]` is a pre-computed 32-bit CRC partial result.
+- **Usage**: `table_value = crc_tables[num_input_bytes - byte_position - 1][lookup_index]`
+
+#### Example: Processing 4 Valid Bytes
+
+```
+Input: i_data = {B3, B2, B1, B0}  (B0 at bits [7:0])
+       i_valid = 4'b1111 (all 4 bytes valid)
+Previous CRC: prev_crc = 0x12345678
+
+Step 1: Count valid bytes
+  num_input_bytes = 4
+
+Step 2: Table lookups
+  lookup[0] = B0 XOR 0x78  -> table_out[0] = crc_tables[3][lookup[0]]
+  lookup[1] = B1 XOR 0x56  -> table_out[1] = crc_tables[2][lookup[1]]
+  lookup[2] = B2 XOR 0x34  -> table_out[2] = crc_tables[1][lookup[2]]
+  lookup[3] = B3 XOR 0x12  -> table_out[3] = crc_tables[0][lookup[3]]
+
+Step 3: XOR reduction
+  crc_calc = table_out[0] XOR table_out[1] XOR table_out[2] XOR table_out[3]
+  crc_calc = crc_calc XOR (0x12345678 >> 32)  // Shift by 32 bits = 0
+
+Step 4: Update on next clock
+  prev_crc <= crc_calc
+```
+
+#### Partial Byte Handling
+
+When `i_valid` has some bits low (e.g., last beat with only 2 bytes):
+
+```
+Input: i_data = 32'hXXXXBBBB (only lower 2 bytes matter)
+       i_valid = 4'b0011 (bytes 0 and 1 valid)
+num_input_bytes = 2
+
+Only process bytes 0 and 1:
+  lookup[0] = B0 XOR prev_crc[7:0]   -> table_out[0] = crc_tables[1][lookup[0]]
+  lookup[1] = B1 XOR prev_crc[15:8]  -> table_out[1] = crc_tables[0][lookup[1]]
+  crc_calc = table_out[0] XOR table_out[1] XOR (prev_crc >> 16)
+```
+
+### 5.3 Integration with rx_mac_stream
+
+The top-level module should:
+1.  Connect `i_data` to `s_axis_tdata`.
+2.  Connect `i_valid` to `s_axis_tkeep` when `s_axis_tvalid` is high, or all zeros when idle.
+3.  Use `i_reset` to clear CRC between packets: `crc_reset = (state == S_IDLE) && !s_axis_tvalid`.
+4.  Set `REGISTER_OUTPUT = 0` to get combinational output for same-cycle comparison on `tlast`.
 
 ## 6. Implementation Checklist
 
